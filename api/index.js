@@ -1,55 +1,92 @@
-const cloudinary = require('cloudinary').v2;
-const { convertToMime } = require('../utils/convert_mime');
+import express from 'express';
+import axios from 'axios';
+import cors from 'cors';
+import multer from 'multer';
+import path from 'path';
+import { getCloudinarySetData, passingDataToFrontend } from './cloudinary_center.js';
 
-// 1. Configure your credentials
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-  secure: true
+import dotenv from 'dotenv';
+import { json } from 'stream/consumers';
+dotenv.config();
+
+const app = express();
+app.use(express.json());
+
+const { PORT } = process.env;
+const corsOptions = {
+   origin:'*', 
+   credentials:true,            //access-control-allow-credentials:true
+   optionSuccessStatus:200,
+};
+
+app.use(cors(corsOptions));
+
+app.get("/", (req, res) => {
+  res.send(`<pre>Nothing to see here.
+Checkout README.md to start.</pre>`);
 });
-console.log(getCloudinarySignature());
-passingDataToFrontend();
-// 2. Create a function to generate the signature
-function getCloudinarySignature() {
-  const timestamp = Math.round(new Date().getTime() / 1000); // Current Unix timestamp
+
+//#region Visualizar Imagens
+/*------------------------------------------------------------------------------------ */
+//app.get('/uploads/:filename', (req, res) => {
+//  const { filename } = req.params;
+//  res.sendFile(path.join(__dirname, 'uploads', filename));
+//});
+//#endregion
+
+
+//#region Visualizar Imagens Cloudinary download (by asset ID)
+/*------------------------------------------------------------------------------------ */
+//https://api.cloudinary.com/v1_1/demo/asset/download?asset_id=wu1js8tlwoib7839a0bkw&attachment=true&timestamp=173719931&api_key=436464676&signature=a788d68f86a6f868af
+app.get('/download/:asset_id', (req, res) => {
+  const { asset_id } = req.params;
+  const { signature, timestamp, apiKey, cloud_name, api_secret, folder } = getCloudinarySetData(); // Ensure signature and timestamp are set
+console.log(`Config data: signature=${signature}, timestamp=${timestamp}, apiKey=${apiKey}, cloud_name=${cloud_name}, api_secret=${api_secret}, folder=${folder}`);
+
+//mount the URL for Cloudinary download
+const cloudinaryUrl = `https://api.cloudinary.com/v1_1/${cloud_name}/asset/download?asset_id=${asset_id}&attachment=true&timestamp=${timestamp}&api_key=${apiKey}&signature=${signature}`;
+
+  res.redirect(cloudinaryUrl);
+});
+/*------------------------------------------------------------------------------------ */
+//#endregion
+
+
+//#region Upload de Imagens
+/*------------------------------------------------------------------------------------ */
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    // Define a pasta onde a imagem será salva
+    cb(null, 'uploads/');
+  },
+  filename: (req, file, cb) => {
+    // Define o nome do arquivo (nome original + data atual para evitar duplicatas)
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({ storage: storage });
+
+// Rota para receber a imagem (campo 'imagem' no formulário)
+app.post('/upload', upload.single('imagem'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).send('Nenhum arquivo enviado.');
+  }
   
-  // Define parameters you intend to send to Cloudinary (e.g., upload folder)
-  const paramsToSign = {
-    timestamp: timestamp,
-    folder: 'user_uploads' 
-  };
+  const r = passingDataToFrontend(req.file.filename, ); // Call the function to send data to Cloudinary
 
-  // 3. Generate the signature code
-  const signature = cloudinary.utils.api_sign_request(
-    paramsToSign, 
-    cloudinary.config().api_secret
-  );
+  let jsonResp = {
+    SERVIDOR: `Imagem salva com sucesso: ${req.file.filename}`,
+    CLOUDINARY: `Imagem salva com sucesso:`
+  } + r;
 
-  // Return these 3 exact values to your frontend
-  process.env.Signature = signature;
-  process.env.Timestamp = timestamp;
+  res.send(jsonResp);
+});
+/*------------------------------------------------------------------------------------ */
+//#endregion
 
-  return {
-    signature,
-    timestamp,
-    apiKey: cloudinary.config().api_key ? cloudinary.config().api_key : process.env.CLOUDINARY_API_KEY
-  };
-}
 
-function passingDataToFrontend() {
-    // Example Frontend Upload payload
-const formData = new FormData();
-formData.append("file", convertToMime("path/to/your/file.jpg"));
-formData.append("api_key", process.env.CLOUDINARY_API_KEY);
-formData.append("timestamp", process.env.Timestamp);
-formData.append("signature", process.env.Signature);
-formData.append("folder", process.env.CLOUDINARY_FOLDER);
-
-fetch("https://cloudinary.com", {
-  method: "POST",
-  body: formData
-})
-.then(response => response.json())
-.then(data => console.log("Upload successful!", data));
-}
+app.listen(PORT, () => {
+  console.log(`Servidor rodando na porta ${PORT}`);
+});

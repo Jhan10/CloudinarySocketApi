@@ -1,8 +1,4 @@
-const mime = require('mime-types')
-
-exports.convertToMime = (filePath) => {
-        return mime.lookup(filePath);
-};
+import mime from 'mime-types';
 
 const test = () => {
     caminho_arquivo = "caminho/para/seu/arquivo.jpg"
@@ -11,7 +7,7 @@ const test = () => {
 
     console.log(`Tipo MIME: ${tipo_mime}`)
 };
- const convertToMime = (filePath) => {
+
+export const convertToMime = (filePath) => {
     return mime.lookup(filePath);
 };
-
